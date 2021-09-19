@@ -8,7 +8,7 @@ search_scalar = '0x186'  # TODO: currently HARD CODED, add argument parameter
 
 def argument_parsing():
     if len(sys.argv) < 2:
-        print('❌  Usage: python {} libflutter.so'.format(sys.argv[0]))
+        print('❌  Usage: python {} [libflutter.so | Flutter]'.format(sys.argv[0]))
         exit(-1)
 
     if not os.path.exists(sys.argv[1]):
@@ -16,7 +16,7 @@ def argument_parsing():
         exit(-1)
 
     if not os.path.isfile(sys.argv[1]):
-        print('❌  "{}" is a directory, please provide a valid libflutter.so file...'.format(sys.argv[1]))
+        print('❌  "{}" is a directory, please provide a valid libflutter.so/Flutter file...'.format(sys.argv[1]))
         exit(-1)
     return sys.argv[1]
 
@@ -28,27 +28,37 @@ def arch_parsing(r2):
         print('❌  File "{}" is not a binary...'.format(sys.argv[1]))
         exit(0)
 
-    if info_bin.get('os') != 'android':
-        print('❌  Currently only supporting Android...')
-        exit(0)
-
     if info_bin.get('arch') != 'arm':
         print('❌  Currently only supporting ARM...')
         exit(0)
 
-    return int(info_bin.get('class')[3:])
+    return int(info_bin.get('bits'))
 
 
-def perform_64bits_analysis(r2):
-    print('🔥 Performing Advanced analysis (aaaa)...')
-    r2.cmd('aaaa')
+def os_parsing(r2):
+    info = r2.cmdj('ij')
+    os = info.get('bin').get('os')
+
+    if not (os == 'android' or os == 'ios'):
+        print('❌  Currently only supporting Android and iOS...')
+        exit(0)
+
+    return os
+
+
+def perform_64bits_analysis(r2, os):
+    print('🔥 Performing Advanced analysis...')
+    if os == 'android':
+        r2.cmd('aaaa')
+    elif os == 'ios':
+        r2.cmd('aa')
 
     print('🔥 Searching for instructions with scalar value (/aij {})...'.format(search_scalar))
     search = r2.cmdj('/aij {},'.format(search_scalar))
 
     mov_instructions = []
     for hit in search:
-        if hit['code'].startswith('mov '):
+        if hit['code'].startswith('mov'):
             print('\033[31m{} {}\033[0m'.format(hex(hit['offset']), hit['code']))
             mov_instructions.append(hit)
         else:
@@ -62,7 +72,7 @@ def perform_64bits_analysis(r2):
     target = ''
     for mov_instruction in mov_instructions:
         instructions = r2.cmdj('pdj 3 @{}'.format(mov_instruction['offset']))
-        if len(instructions) == 3 and instructions[1]['disasm'].startswith('bl ') and instructions[2]['disasm'].startswith('mov '):
+        if len(instructions) == 3 and instructions[1]['disasm'].startswith('bl ') and instructions[2]['disasm'].startswith('mov'):
             print('✅  {} {} (match)'.format(hex(mov_instruction['offset']), mov_instruction['code']))
             target = hex(mov_instruction['offset'])
             break
@@ -77,15 +87,18 @@ def perform_64bits_analysis(r2):
     r2.cmd('s {}'.format(target))
 
     fcn_addr = r2.cmd('afi.')
-    address = '0x' + fcn_addr.split('.')[1].strip()
+    address = '0x' + fcn_addr.split('.')[-1].strip()
 
     print('🔥 Found ssl_crypto_x509_session_verify_cert_chain @ {} (afi.)...'.format(address))
     return address
 
 
 def perform_32bits_analysis(r2):
-    print('🔥 Performing analysis (aaa)...')
-    r2.cmd('aaa')
+    print('🔥 Performing Advanced analysis...')
+    if os == 'android':
+        r2.cmd('aaaa')
+    elif os == 'ios':
+        r2.cmd('aa')
 
     print('🔥 Searching for instructions with scalar value (/aij {})...'.format(search_scalar))
     search = r2.cmdj('/aij {},'.format(search_scalar))
@@ -128,10 +141,15 @@ def perform_32bits_analysis(r2):
     return hex(int(target, 16) + 1)  # Off by one because it's a THUMB function
 
 
-def save_to_frida_script(address):
-    with open('template_frida_hook.js') as f:
-        template = f.read()
-    output_script = 'frida_libflutter_{}.js'.format(time.strftime("%Y.%m.%d_%H.%M.%S"))
+def save_to_frida_script(address, os):
+    if os == 'android':
+        with open('template_frida_hook_android.js') as f:
+            template = f.read()
+    elif os == 'ios':
+        with open('template_frida_hook_ios.js') as f:
+            template = f.read()
+
+    output_script = 'frida_flutter_{}_{}.js'.format(os, time.strftime("%Y.%m.%d_%H.%M.%S"))
     with open(output_script, 'w') as f:
         f.write(template.replace('0x00000000', address))
     print('🔥 Wrote script to {}...'.format(output_script))
@@ -144,15 +162,16 @@ if __name__ == "__main__":
 
     r2 = r2pipe.open(file)
     bits = arch_parsing(r2)
+    os = os_parsing(r2)
 
-    print('🔥 Detected Android ARM {} bits...'.format(bits))
+    print('🔥 Detected {} ARM {} bits...'.format(os, bits))
     if bits == 64:
-        address = perform_64bits_analysis(r2)
+        address = perform_64bits_analysis(r2, os)
     elif bits == 32:
-        address = perform_32bits_analysis(r2)
+        address = perform_32bits_analysis(r2, os)
     else:
         print('❌  Quantum???')
         exit(-1)
 
-    save_to_frida_script(address)
+    save_to_frida_script(address, os)
     print('🚀 exec time: {}s'.format(time.time() - start_time))

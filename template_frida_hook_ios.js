@@ -15,7 +15,7 @@ function hook_ssl_verify_result(address)
 function disablePinning()
 {
     console.log("Enter disablePinning()");
-    var m = Process.findModuleByName("Flutter");     // formerly known as "Runner"
+    var m = Process.findModuleByName("Flutter");
 
     hook_ssl_verify_result(m.base.add(0x00000000))
 }

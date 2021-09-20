@@ -32,7 +32,7 @@ def arch_parsing(r2):
         print('❌  Currently only supporting ARM...')
         exit(0)
 
-    return int(info_bin.get('bits'))
+    return int(info_bin.get('class')[-2:])
 
 
 def os_parsing(r2):

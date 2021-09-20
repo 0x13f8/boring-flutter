@@ -93,7 +93,7 @@ def perform_64bits_analysis(r2, os):
     return address
 
 
-def perform_32bits_analysis(r2):
+def perform_32bits_analysis(r2, os):
     print('🔥 Performing Advanced analysis...')
     if os == 'android':
         r2.cmd('aaaa')

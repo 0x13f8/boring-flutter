@@ -1,37 +1,37 @@
-function hook_ssl_crypto_x509_session_verify_cert_chain(address) {
-    Interceptor.attach(address, {
+function log(msg) {
+    console.log("[" + new Date().toLocaleString() + "] " + msg);
+}
+
+var awaitForCondition = function(callback) {
+    var int = setInterval(function() {
+        if (Module.findBaseAddress("libflutter.so")) {
+            clearInterval(int);
+            callback();
+            log("libflutter.so is loaded");
+            return;
+        }
+    }, 0);
+}
+
+function disablePinning() {
+    var baseAddress = Module.findBaseAddress("libflutter.so");
+    var hookAddress = baseAddress.add(ptr("0x00000000"));
+
+    Interceptor.attach(hookAddress, {
         onEnter: function(args) {
-            console.log('Disabling SSL validation...');
+            log("Enter x509.cc - ssl_crypto_x509_session_verify_cert_chain()");
         },
         onLeave: function(retval) {
-            console.log(`ssl_crypto_x509_session_verify_cert_chain: ${retval} -> 0x1`);
+            log("Disable certificate validation/pinning");
             retval.replace(0x1);
         }
     });
 }
 
-Java.perform(function() {
-    // Early loading
-    const System = Java.use('java.lang.System');
-    const Runtime = Java.use('java.lang.Runtime');
-    const System_loadLibrary = System.loadLibrary.overload('java.lang.String');
-    const VMStack = Java.use('dalvik.system.VMStack');
-
-    System_loadLibrary.implementation = function(library) {
-        try {
-            const loaded = Runtime.getRuntime().loadLibrary0(VMStack.getCallingClassLoader(), library);
-            if(library.includes('flutter')) { // libflutter.so
-                var libflutter = Module.findBaseAddress('libflutter.so');
-                console.log(`libflutter.so found @ ${libflutter}`);
-                var offset = 0x00000000;
-                var addr = libflutter.add(offset);
-                console.log(`ssl_crypto_x509_session_verify_cert_chain @ ${addr}`);
-
-                hook_ssl_crypto_x509_session_verify_cert_chain(addr);
-            }
-            return loaded;
-        } catch(ex) {
-            console.log(ex);
-        }
-    };
-});
+if (Java.available) {
+    Java.perform(function() {
+        awaitForCondition(disablePinning);
+    });
+} else {
+    log("Error: Java runtime is not available!");
+}

@@ -1,27 +1,35 @@
-function hook_ssl_verify_result(address)
-{
-    Interceptor.attach(address, {
+function log(msg) {
+    console.log("[" + new Date().toLocaleString() + "] " + msg);
+}
+
+var awaitForCondition = function(callback) {
+    var int = setInterval(function() {
+        if (Module.findBaseAddress("Flutter")) {
+            clearInterval(int);
+            callback();
+            log("Flutter framework is loaded");
+            return;
+        }
+    }, 0);
+}
+
+function disablePinning() {
+    var baseAddress = Module.findBaseAddress("Flutter");
+    var hookAddress = baseAddress.add(ptr("0x00000000"));
+
+    Interceptor.attach(hookAddress, {
         onEnter: function(args) {
-            console.log("onEnter: Disabling SSL validation");
+            log("Enter handshake.cc - ssl_verify_peer_cert()");
         },
-        onLeave: function(retval)
-        {
-            console.log("onLeave: Disabling SSL validation");
-            retval.replace(0x1);
+        onLeave: function(retval) {
+            log("Disable certificate validation/pinning");
+            retval.replace(0x0);
         }
     });
 }
 
-function disablePinning()
-{
-    console.log("Enter disablePinning()");
-    var m = Process.findModuleByName("Flutter");
-
-    hook_ssl_verify_result(m.base.add(0x00000000))
-}
-
 if (ObjC.available) {
-    disablePinning()
+    awaitForCondition(disablePinning);
 } else {
-    send("error: Objective-C Runtime is not available!");
+    log("Error: Objective-C runtime is not available!");
 }

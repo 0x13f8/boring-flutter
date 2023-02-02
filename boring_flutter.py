@@ -6,6 +6,7 @@ import subprocess
 
 search_scalar_verify_cert_chain = '0x186'
 search_scalar_verify_peer_cert = '0x121'     # SSL_R_OCSP_CB_ERROR
+search_string_ssl_client = 'ssl_client'
 
 
 def argument_parsing():
@@ -39,6 +40,7 @@ def arch_parsing(r2):
     else:
         return info_bin.get('bits')
 
+
 def platform_parsing(r2):
     info = r2.cmdj('ij')
     platform = info.get('bin').get('os')
@@ -49,6 +51,7 @@ def platform_parsing(r2):
 
     return platform
 
+
 def is_fat_binary(r2, file_path):
     info = r2.cmdj('ij')
     packet = info.get('core').get('packet')
@@ -58,6 +61,7 @@ def is_fat_binary(r2, file_path):
         return True
     else:
         return False
+
 
 def thin_binary(file_path):
     print('🔥 Thinning a fat binary to obtain a 64-bit version...')
@@ -71,54 +75,32 @@ def thin_binary(file_path):
 
     return newfile_path
 
+
 def perform_64bits_analysis_verify_cert_chain(r2, platform):
-    print('🔥 Performing Advanced analysis...')
+    print('🔥 Performing Advanced analysis (64-bit)...')
     if platform == 'android':
         r2.cmd('aaaa')
     elif platform == 'ios':
         r2.cmd('aa')
 
-    print('🔥 Searching for instructions with scalar value (/aij {})...'.format(search_scalar_verify_cert_chain))
-    search = r2.cmdj('/aij {},'.format(search_scalar_verify_cert_chain))
+    print('🔥 Searching for the string "{}" (/ij {})...'.format(search_string_ssl_client, search_string_ssl_client))
+    search = r2.cmdj('/ij {}'.format(search_string_ssl_client))
 
-    mov_instructions = []
-    for hit in search:
-        if hit['code'].startswith('mov'):
-            print('\033[31m{} {}\033[0m'.format(hex(hit['offset']), hit['code']))
-            mov_instructions.append(hit)
-        else:
-            print('{} {}'.format(hex(hit['offset']), hit['code']))
+    if len(search) == 0:
+        print('❌  Could not find the string "{}" ...'.format(search_string_ssl_client))
+        exit(0)       
+    else:
+        print('🔥 Found the string "{}" @ {}...'.format(search_string_ssl_client, hex(search[0]['offset'])))
+        print('🔥 Searching for a cross-reference of the string "{}" to find ssl_crypto_x509_session_verify_cert_chain()...'.format(search_string_ssl_client))
+        target = r2.cmdj('axtj {}'.format(search[0]['offset']))
+        target = target[0]['fcn_addr']
+        address = hex(target)
+        print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} ...'.format(address))
+        return address
 
-    if not mov_instructions:
-        print('❌  Could not find an instruction with {} scalar value...'.format(search_scalar_verify_cert_chain))
-        exit(0)
-
-    print('🔥 Performing simple instruction matching to find ssl_crypto_x509_session_verify_cert_chain()...')
-    target = ''
-    for mov_instruction in mov_instructions:
-        instructions = r2.cmdj('pdj 3 @{}'.format(mov_instruction['offset']))
-        if len(instructions) == 3 and instructions[1]['disasm'].startswith('bl ') and instructions[2]['disasm'].startswith('mov'):
-            print('✅  {} {} (match)'.format(hex(mov_instruction['offset']), mov_instruction['code']))
-            target = hex(mov_instruction['offset'])
-            break
-        else:
-            print('❌  {} {} (no match)'.format(hex(mov_instruction['offset']), mov_instruction['code']))
-
-    if not target:
-        print('❌  Could not find a matching function ...')
-        exit(0)
-
-    print('🔥 Seeking to target (s {})...'.format(target))
-    r2.cmd('s {}'.format(target))
-
-    fcn_addr = r2.cmd('afi.')
-    address = '0x' + fcn_addr.split('.')[-1].strip()
-
-    print('🔥 Found ssl_crypto_x509_session_verify_cert_chain @ {} (afi.)...'.format(address))
-    return address
 
 def perform_64bits_analysis_verify_peer_cert(r2, platform):
-    print('🔥 Performing Advanced analysis...')
+    print('🔥 Performing Advanced analysis (64-bit)...')
     if platform == 'android':
         r2.cmd('aaaa')
     elif platform == 'ios':
@@ -160,8 +142,9 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
     fcn_addr = r2.cmd('afi.')
     address = '0x' + fcn_addr.split('.')[-1].strip()
 
-    print('🔥 Found ssl_verify_peer_cert @ {} (afi.)...'.format(address))
+    print('🔥 Found ssl_verify_peer_cert() @ {} (afi.)...'.format(address))
     return address
+
 
 def perform_32bits_analysis_verify_cert_chain(r2, platform):
     print('🔥 Performing Advanced analysis...')
@@ -207,7 +190,7 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
         print('❌  Could not find a matching function ...')
         exit(0)
 
-    print('🔥 Found ssl_crypto_x509_session_verify_cert_chain @ {} ...'.format(target))
+    print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} ...'.format(target))
     return hex(int(target, 16) + 1)  # Off by one because it's a THUMB function
 
 

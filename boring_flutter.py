@@ -4,7 +4,7 @@ import sys
 import os
 import subprocess
 
-search_scalar_verify_cert_chain = '0x186'
+search_scalar_verify_cert_chain = '0xb'
 search_scalar_verify_peer_cert = '0x121'     # SSL_R_OCSP_CB_ERROR
 search_string_ssl_client = 'ssl_client'
 
@@ -147,7 +147,7 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
 
 
 def perform_32bits_analysis_verify_cert_chain(r2, platform):
-    print('🔥 Performing Advanced analysis...')
+    print('🔥 Performing Advanced analysis (32-bit)...')
     if platform == 'android':
         r2.cmd('aaaa')
     elif platform == 'ios':
@@ -159,10 +159,8 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
     mov_instructions = []
     for hit in search:
         if hit['code'].startswith('mov'):
-            print('\033[31m{} {}\033[0m'.format(hex(hit['offset']), hit['code']))
+            # print('\033[31m{} {}\033[0m'.format(hex(hit['offset']), hit['code']))
             mov_instructions.append(hit)
-        else:
-            print('{} {}'.format(hex(hit['offset']), hit['code']))
 
     if not mov_instructions:
         print('❌  Could not find an instruction with {} scalar value...'.format(search_scalar_verify_cert_chain))
@@ -171,26 +169,28 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
     print('🔥 Performing simple instruction matching to find ssl_crypto_x509_session_verify_cert_chain()...')
     target = ''
     for mov_instruction in mov_instructions:
-        print('🔥 Find prelude for current offset @ {}'.format(hex(mov_instruction['offset'])))
-        r2.cmd('s {}'.format(mov_instruction['offset']))
+        # print('🔥 Find prelude for current offset @ {}'.format(hex(mov_instruction['offset'])))
+        try:
+            r2.cmd('s {}'.format(mov_instruction['offset']))
+            prelude = r2.cmd('ap').splitlines()[-1]
 
-        prelude = r2.cmd('ap').splitlines()[-1]
-        print('🔥 Pattern matching on prelude @ {}'.format(prelude))
-        instructions = r2.cmdj('pdj 5 @{}'.format(prelude))
-        if len(instructions) == 5 and instructions[0]['type'] == 'push' and instructions[1]['type'] == 'sub'\
-                and instructions[2]['type'] == 'mov' and instructions[3]['type'] == 'mov'\
-                and instructions[3]['val'] == 0x50 and instructions[4]['type'] == 'store':
-            print('✅  scalar offset @ {} -> prelude offset @ {} (match)'.format(mov_instruction['offset'], prelude))
-            target = prelude
-            break
-        else:
-            print('❌  scalar offset @ {} -> prelude offset @ {} (no match)'.format(mov_instruction['offset'], prelude))
+            # print('🔥 Pattern matching on prelude @ {}'.format(prelude))
+            instructions = r2.cmdj('pdj 5 @{}'.format(prelude))
+            if len(instructions) == 5 and instructions[0]['type'] == 'push' and instructions[1]['type'] == 'sub'\
+                    and instructions[2]['type'] == 'mov' and instructions[3]['type'] == 'mov'\
+                    and instructions[3]['val'] == 0x50 and instructions[4]['type'] == 'store':
+                print('✅  scalar offset @ {} -> prelude offset @ {} (match)'.format(mov_instruction['offset'], prelude))
+                target = prelude
+                break
+        except:
+            continue
 
     if not target:
         print('❌  Could not find a matching function ...')
         exit(0)
 
     print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} ...'.format(target))
+    print('🔥 Final offset is off-by-one due to the THUMB function in 32-bit ARM...')
     return hex(int(target, 16) + 1)  # Off by one because it's a THUMB function
 
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
 
     file = argument_parsing()
 
-    r2 = r2pipe.open(file)
+    r2 = r2pipe.open(file, flags=['-2'])    # disable stderr
     bits = arch_parsing(r2)
     platform = platform_parsing(r2)
 
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     if platform == 'ios':
         if is_fat_binary(r2, file):
             newfile = thin_binary(file)
-            r2 = r2pipe.open(newfile)
+            r2 = r2pipe.open(newfile, flags=['-2'])     # disable stderr
         address = perform_64bits_analysis_verify_peer_cert(r2, platform)
     elif platform == 'android':
         if bits == 32:

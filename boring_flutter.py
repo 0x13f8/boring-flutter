@@ -2,6 +2,7 @@ import r2pipe
 import time
 import sys
 import os
+import shutil
 import subprocess
 
 search_scalar_verify_cert_chain = '0xb'
@@ -15,11 +16,11 @@ def argument_parsing():
         exit(-1)
 
     if not os.path.exists(sys.argv[1]):
-        print('❌  File "{}" not found...'.format(sys.argv[1]))
+        print('❌  File "{}" not found'.format(sys.argv[1]))
         exit(-1)
 
     if not os.path.isfile(sys.argv[1]):
-        print('❌  "{}" is a directory, please provide a valid libflutter.so/Flutter file...'.format(sys.argv[1]))
+        print('❌  "{}" is a directory, please provide a valid libflutter.so/Flutter file'.format(sys.argv[1]))
         exit(-1)
     return sys.argv[1]
 
@@ -28,11 +29,11 @@ def arch_parsing(r2):
     info = r2.cmdj('ij')
     info_bin = info.get('bin')
     if not info_bin:
-        print('❌  File "{}" is not a binary...'.format(sys.argv[1]))
+        print('❌  File "{}" is not a binary'.format(sys.argv[1]))
         exit(0)
 
     if info_bin.get('arch') != 'arm':
-        print('❌  Currently only supporting ARM...')
+        print('❌  Currently only supporting ARM')
         exit(0)
 
     if info_bin.get('class') == 'ELF32':
@@ -46,7 +47,7 @@ def platform_parsing(r2):
     platform = info.get('bin').get('os')
 
     if not (platform == 'android' or platform == 'ios'):
-        print('❌  Currently only supporting Android and iOS...')
+        print('❌  Currently only supporting Android and iOS')
         exit(0)
 
     return platform
@@ -57,56 +58,56 @@ def is_fat_binary(r2, file_path):
     packet = info.get('core').get('packet')
 
     if packet == 'xtr.fatmach0':
-        print('🔥 Found a fat binary...')
+        print('🔥 Found a fat binary')
         return True
     else:
         return False
 
 
 def thin_binary(file_path):
-    print('🔥 Thinning a fat binary to obtain a 64-bit version...')
+    print('🔥 Thinning a fat binary to obtain a 64-bit version')
     newfile_path = os.path.join(os.getcwd(), 'Flutter64')
 
     try:
         subprocess.call(['lipo', '-thin', 'arm64', file_path, '-output', newfile_path])
     except:
-        print('❌  Cannot thin a binary. Please check if the "lipo" command exists...')
+        print('❌  Cannot thin a binary. Please check if the "lipo" command exists')
         exit(0)
 
     return newfile_path
 
 
 def perform_64bits_analysis_verify_cert_chain(r2, platform):
-    print('🔥 Performing Advanced analysis (64-bit)...')
+    print('🔥 Performing advanced analysis (64-bit)')
     if platform == 'android':
         r2.cmd('aaaa')
     elif platform == 'ios':
         r2.cmd('aa')
 
-    print('🔥 Searching for the string "{}" (/ij {})...'.format(search_string_ssl_client, search_string_ssl_client))
+    print('🔥 Searching for the string "{}" (/ij {})'.format(search_string_ssl_client, search_string_ssl_client))
     search = r2.cmdj('/ij {}'.format(search_string_ssl_client))
 
     if len(search) == 0:
-        print('❌  Could not find the string "{}" ...'.format(search_string_ssl_client))
+        print('❌  Could not find the string "{}" '.format(search_string_ssl_client))
         exit(0)       
     else:
-        print('🔥 Found the string "{}" @ {}...'.format(search_string_ssl_client, hex(search[0]['offset'])))
-        print('🔥 Searching for a cross-reference of the string "{}" to find ssl_crypto_x509_session_verify_cert_chain()...'.format(search_string_ssl_client))
+        print('🔥 Found the string "{}" @ {}'.format(search_string_ssl_client, hex(search[0]['offset'])))
+        print('🔥 Searching for a cross-reference of the string "{}" to find ssl_crypto_x509_session_verify_cert_chain()'.format(search_string_ssl_client))
         target = r2.cmdj('axtj {}'.format(search[0]['offset']))
         target = target[0]['fcn_addr']
         address = hex(target)
-        print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} ...'.format(address))
+        print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} '.format(address))
         return address
 
 
 def perform_64bits_analysis_verify_peer_cert(r2, platform):
-    print('🔥 Performing Advanced analysis (64-bit)...')
+    print('🔥 Performing advanced analysis (64-bit)')
     if platform == 'android':
         r2.cmd('aaaa')
     elif platform == 'ios':
         r2.cmd('aa')
 
-    print('🔥 Searching for instructions with scalar value (/aij {})...'.format(search_scalar_verify_peer_cert))
+    print('🔥 Searching for instructions with scalar value (/aij {})'.format(search_scalar_verify_peer_cert))
     search = r2.cmdj('/aij {},'.format(search_scalar_verify_peer_cert))
 
     mov_instructions = []
@@ -118,10 +119,10 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
             print('{} {}'.format(hex(hit['offset']), hit['code']))
 
     if not mov_instructions:
-        print('❌  Could not find an instruction with {} scalar value...'.format(search_scalar_verify_peer_cert))
+        print('❌  Could not find an instruction with {} scalar value'.format(search_scalar_verify_peer_cert))
         exit(0)
 
-    print('🔥 Performing simple instruction matching to find ssl_verify_peer_cert()...')
+    print('🔥 Performing simple instruction matching to find ssl_verify_peer_cert()')
     target = ''
     for mov_instruction in mov_instructions:
         instructions = r2.cmdj('pdj 3 @{}'.format(mov_instruction['offset']))
@@ -133,27 +134,27 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
             print('❌  {} {} (no match)'.format(hex(mov_instruction['offset']), mov_instruction['code']))
 
     if not target:
-        print('❌  Could not find a matching function ...')
+        print('❌  Could not find a matching function ')
         exit(0)
 
-    print('🔥 Seeking to target (s {})...'.format(target))
+    print('🔥 Seeking to target (s {})'.format(target))
     r2.cmd('s {}'.format(target))
 
     fcn_addr = r2.cmd('afi.')
     address = '0x' + fcn_addr.split('.')[-1].strip()
 
-    print('🔥 Found ssl_verify_peer_cert() @ {} (afi.)...'.format(address))
+    print('🔥 Found ssl_verify_peer_cert() @ {} (afi.)'.format(address))
     return address
 
 
 def perform_32bits_analysis_verify_cert_chain(r2, platform):
-    print('🔥 Performing Advanced analysis (32-bit)...')
+    print('🔥 Performing advanced analysis (32-bit)')
     if platform == 'android':
         r2.cmd('aaaa')
     elif platform == 'ios':
         r2.cmd('aa')
 
-    print('🔥 Searching for instructions with scalar value (/aij {})...'.format(search_scalar_verify_cert_chain))
+    print('🔥 Searching for instructions with scalar value (/aij {})'.format(search_scalar_verify_cert_chain))
     search = r2.cmdj('/aij {},'.format(search_scalar_verify_cert_chain))
 
     mov_instructions = []
@@ -163,10 +164,10 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
             mov_instructions.append(hit)
 
     if not mov_instructions:
-        print('❌  Could not find an instruction with {} scalar value...'.format(search_scalar_verify_cert_chain))
+        print('❌  Could not find an instruction with {} scalar value'.format(search_scalar_verify_cert_chain))
         exit(0)
 
-    print('🔥 Performing simple instruction matching to find ssl_crypto_x509_session_verify_cert_chain()...')
+    print('🔥 Performing simple instruction matching to find ssl_crypto_x509_session_verify_cert_chain()')
     target = ''
     for mov_instruction in mov_instructions:
         # print('🔥 Find prelude for current offset @ {}'.format(hex(mov_instruction['offset'])))
@@ -186,11 +187,11 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
             continue
 
     if not target:
-        print('❌  Could not find a matching function ...')
+        print('❌  Could not find a matching function')
         exit(0)
 
-    print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} ...'.format(target))
-    print('🔥 Final offset is off-by-one due to the THUMB function in 32-bit ARM...')
+    print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} '.format(target))
+    print('🔥 Final offset is off-by-one due to the THUMB function in 32-bit ARM')
     return hex(int(target, 16) + 1)  # Off by one because it's a THUMB function
 
 
@@ -202,10 +203,21 @@ def save_to_frida_script(address, platform):
         with open('template_frida_hook_ios.js') as f:
             template = f.read()
 
-    output_script = 'frida_flutter_{}_{}.js'.format(platform, time.strftime("%Y.%m.%d"))
+    output_script = 'frida_flutter_{}_{}.js'.format(platform, time.strftime("%Y%m%d"))
     with open(output_script, 'w') as f:
         f.write(template.replace('0x00000000', address))
-    print('🔥 Wrote script to {}...'.format(output_script))
+    print('🔥 Wrote a script to: {}'.format(output_script))
+
+
+def save_to_patched_binary(file, address):
+    output_binary = '{}_{}'.format(file, time.strftime("%Y%m%d"))
+    shutil.copy(file, output_binary)
+    r2 = r2pipe.open(output_binary, flags=['-w', '-2'])
+    r2.cmd('s {}'.format(address))
+    r2.cmd('wa mov x0, 1')
+    r2.cmd('s {}'.format(hex(int(address, 16) + 4)))
+    r2.cmd('wa ret')
+    print('🔥 Wrote a binary to: {}'.format(output_binary))
 
 
 if __name__ == "__main__":
@@ -217,7 +229,7 @@ if __name__ == "__main__":
     bits = arch_parsing(r2)
     platform = platform_parsing(r2)
 
-    print('🔥 Detected {} ARM...'.format(platform))
+    print('🔥 Detected {} ARM'.format(platform))
     if platform == 'ios':
         if is_fat_binary(r2, file):
             newfile = thin_binary(file)
@@ -233,4 +245,7 @@ if __name__ == "__main__":
         exit(-1)
 
     save_to_frida_script(address, platform)
+    if platform == 'android':
+        save_to_patched_binary(file, address)
+
     print('🚀 exec time: {}s'.format(time.time() - start_time))

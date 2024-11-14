@@ -11,6 +11,9 @@ search_string_ssl_client = 'ssl_client'
 
 
 def argument_parsing():
+    """
+    Parse command-line arguments
+    """
     if len(sys.argv) < 2:
         print('❌  Usage: python3 {} [libflutter.so | Flutter]'.format(sys.argv[0]))
         exit(-1)
@@ -26,6 +29,9 @@ def argument_parsing():
 
 
 def arch_parsing(r2):
+    """
+    Check the architecture of a binary
+    """
     info = r2.cmdj('ij')
     info_bin = info.get('bin')
     if not info_bin:
@@ -43,6 +49,9 @@ def arch_parsing(r2):
 
 
 def platform_parsing(r2):
+    """
+    Check the OS supported by a binary
+    """
     info = r2.cmdj('ij')
     platform = info.get('bin').get('os')
 
@@ -54,6 +63,9 @@ def platform_parsing(r2):
 
 
 def is_fat_binary(r2, file_path):
+    """
+    Check if a Mach-O binary is fat/universal (contains both 32-bit and 64-bit binaries in the same file)
+    """
     info = r2.cmdj('ij')
     packet = info.get('core').get('packet')
 
@@ -65,6 +77,9 @@ def is_fat_binary(r2, file_path):
 
 
 def thin_binary(file_path):
+    """
+    Convert a universal Mach-O binary to a 64-bit binary
+    """
     print('🔥 Thinning a fat binary to obtain a 64-bit version')
     newfile_path = os.path.join(os.getcwd(), 'Flutter64')
 
@@ -78,6 +93,9 @@ def thin_binary(file_path):
 
 
 def perform_64bits_analysis_verify_cert_chain(r2, platform):
+    """
+    Find an offset of the ssl_crypto_x509_session_verify_cert_chain() function in AArch64
+    """
     print('🔥 Performing advanced analysis (64-bit)')
     if platform == 'android':
         r2.cmd('aaaa')
@@ -101,6 +119,9 @@ def perform_64bits_analysis_verify_cert_chain(r2, platform):
 
 
 def perform_64bits_analysis_verify_peer_cert(r2, platform):
+    """
+    Find an offset of the ssl_verify_peer_cert() function in AArch64
+    """
     print('🔥 Performing advanced analysis (64-bit)')
     if platform == 'android':
         r2.cmd('aaaa')
@@ -148,6 +169,9 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
 
 
 def perform_32bits_analysis_verify_cert_chain(r2, platform):
+    """
+    Find an offset of the ssl_crypto_x509_session_verify_cert_chain() function in 32-bit ARM
+    """
     print('🔥 Performing advanced analysis (32-bit)')
     if platform == 'android':
         r2.cmd('aaaa')
@@ -196,6 +220,9 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
 
 
 def save_to_frida_script(address, platform):
+    """
+    Write an address offset of the target function to a new Frida script
+    """
     if platform == 'android':
         with open('template_frida_hook_android.js') as f:
             template = f.read()
@@ -209,31 +236,39 @@ def save_to_frida_script(address, platform):
     print('🔥 Wrote a script to: {}'.format(output_script))
 
 
-def save_to_patched_binary(file, address):
+def save_to_patched_binary(address, platform, file):
+    """
+    Patch libflutter.so/Flutter and write to a new binary file as follows:
+    - [Android] ssl_crypto_x509_session_verify_cert_chain(): returns 1
+    - [iOS] ssl_verify_peer_cert(): returns 0
+    """
     output_binary = '{}_{}'.format(file, time.strftime("%Y%m%d"))
     shutil.copy(file, output_binary)
-    r2 = r2pipe.open(output_binary, flags=['-w', '-2'])
+    r2 = r2pipe.open(output_binary, flags=['-w', '-2'])     # writable mode, disable stderr
     r2.cmd('s {}'.format(address))
-    r2.cmd('wa mov x0, 1')
-    r2.cmd('s {}'.format(hex(int(address, 16) + 4)))
+
+    if platform == 'android':
+        r2.cmd('wa mov x0, 1')
+    elif platform == 'ios':
+        r2.cmd('wa mov x0, 0')
+
+    r2.cmd('s+4')
     r2.cmd('wa ret')
     print('🔥 Wrote a binary to: {}'.format(output_binary))
 
 
 if __name__ == "__main__":
     start_time = time.time()
-
     file = argument_parsing()
-
-    r2 = r2pipe.open(file, flags=['-2'])    # disable stderr
+    r2 = r2pipe.open(file, flags=['-2'])                    # disable stderr
     bits = arch_parsing(r2)
     platform = platform_parsing(r2)
-
     print('🔥 Detected {} ARM'.format(platform))
+
     if platform == 'ios':
         if is_fat_binary(r2, file):
             newfile = thin_binary(file)
-            r2 = r2pipe.open(newfile, flags=['-2'])     # disable stderr
+            r2 = r2pipe.open(newfile, flags=['-2'])         # disable stderr
         address = perform_64bits_analysis_verify_peer_cert(r2, platform)
     elif platform == 'android':
         if bits == 32:
@@ -245,7 +280,6 @@ if __name__ == "__main__":
         exit(-1)
 
     save_to_frida_script(address, platform)
-    if platform == 'android':
-        save_to_patched_binary(file, address)
+    save_to_patched_binary(address, platform, file)
 
     print('🚀 exec time: {}s'.format(time.time() - start_time))

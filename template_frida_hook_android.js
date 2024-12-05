@@ -15,7 +15,7 @@ var awaitForCondition = function(callback) {
 
 function disablePinning() {
     var baseAddress = Module.findBaseAddress("libflutter.so");
-    var hookAddress = baseAddress.add(ptr("0x00000000"));       // modify an offset here
+    var hookAddress = baseAddress.add(ptr("0x00000000"));       // for 32-bit ARM, the address must be off by one due to a THUMB function
 
     Interceptor.attach(hookAddress, {
         onEnter: function(args) {

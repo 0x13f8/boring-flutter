@@ -215,8 +215,7 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
         exit(0)
 
     print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} '.format(target))
-    print('🔥 Final offset is off-by-one due to the THUMB function in 32-bit ARM')
-    return hex(int(target, 16) + 1)  # Off by one because it's a THUMB function
+    return hex(int(target, 16))
 
 
 def save_to_frida_script(address, platform):
@@ -236,7 +235,7 @@ def save_to_frida_script(address, platform):
     print('🔥 Wrote a script to: {}'.format(output_script))
 
 
-def save_to_patched_binary(address, platform, file):
+def save_to_patched_binary(address, platform, bits, file):
     """
     Patch libflutter.so/Flutter and write to a new binary file as follows:
     - [Android] ssl_crypto_x509_session_verify_cert_chain(): returns 1
@@ -248,12 +247,19 @@ def save_to_patched_binary(address, platform, file):
     r2.cmd('s {}'.format(address))
 
     if platform == 'android':
-        r2.cmd('wa mov x0, 1')
+        if bits == 64:
+            r2.cmd('wa mov x0, 1')
+            r2.cmd('s+4')
+            r2.cmd('wa ret')
+        elif bits == 32:
+            r2.cmd('wa mov.w r0, 1')
+            r2.cmd('s+4')
+            r2.cmd('wa bx lr')
     elif platform == 'ios':
-        r2.cmd('wa mov x0, 0')
+            r2.cmd('wa mov x0, 0')
+            r2.cmd('s+4')
+            r2.cmd('wa ret')
 
-    r2.cmd('s+4')
-    r2.cmd('wa ret')
     print('🔥 Wrote a binary to: {}'.format(output_binary))
 
 
@@ -280,6 +286,6 @@ if __name__ == "__main__":
         exit(-1)
 
     save_to_frida_script(address, platform)
-    save_to_patched_binary(address, platform, file)
+    save_to_patched_binary(address, platform, bits, file)
 
     print('🚀 exec time: {}s'.format(time.time() - start_time))

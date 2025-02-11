@@ -111,11 +111,18 @@ def perform_64bits_analysis_verify_cert_chain(r2, platform):
     else:
         print('🔥 Found the string "{}" @ {}'.format(search_string_ssl_client, hex(search[0]['offset'])))
         print('🔥 Searching for a cross-reference of the string "{}" to find ssl_crypto_x509_session_verify_cert_chain()'.format(search_string_ssl_client))
-        target = r2.cmdj('axtj {}'.format(search[0]['offset']))
-        target = target[0]['fcn_addr']
-        address = hex(target)
-        print('🔥 Found ssl_crypto_x509_session_verify_cert_chain() @ {} '.format(address))
-        return address
+        targets = r2.cmdj('axtj {}'.format(search[0]['offset']))
+        for t in targets:
+            target = t['fcn_addr']
+            print('🔥 Found potential function @ {}'.format(hex(target)))
+            instructions = r2.cmdj('pdj 2 @{}'.format(target))
+            if (len(instructions) == 2 and instructions[0]['disasm'].startswith('sub') and (instructions[1]['disasm'].startswith('stp') or instructions[1]['disasm'].startswith('str'))):
+                address = hex(target)
+                print('✅  Found ssl_crypto_x509_session_verify_cert_chain() @ {}'.format(address))
+                return address
+
+        print('❌  Could not find ssl_crypto_x509_session_verify_cert_chain()')
+        exit(0)
 
 
 def perform_64bits_analysis_verify_peer_cert(r2, platform):

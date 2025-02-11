@@ -114,7 +114,7 @@ def perform_64bits_analysis_verify_cert_chain(r2, platform):
         targets = r2.cmdj('axtj {}'.format(search[0]['offset']))
         for t in targets:
             target = t['fcn_addr']
-            print('🔥 Found potential function @ {}'.format(hex(target)))
+            print('🔥  Found potential function @ {}'.format(hex(target)))
             instructions = r2.cmdj('pdj 2 @{}'.format(target))
             if (len(instructions) == 2 and instructions[0]['disasm'].startswith('sub') and (instructions[1]['disasm'].startswith('stp') or instructions[1]['disasm'].startswith('str'))):
                 address = hex(target)

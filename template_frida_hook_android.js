@@ -2,19 +2,8 @@ function log(msg) {
     console.log("[" + new Date().toLocaleString() + "] " + msg);
 }
 
-var awaitForCondition = function(callback) {
-    var int = setInterval(function() {
-        if (Module.findBaseAddress("libflutter.so")) {
-            clearInterval(int);
-            callback();
-            log("libflutter.so is loaded");
-            return;
-        }
-    }, 0);
-}
-
-function disablePinning() {
-    var baseAddress = Module.findBaseAddress("libflutter.so");
+function disablePinning(moduleName) {
+    var baseAddress = Module.findBaseAddress(moduleName);
     var hookAddress = baseAddress.add(ptr("0x00000000"));       // for 32-bit ARM, the address must be off by one due to a THUMB function
 
     Interceptor.attach(hookAddress, {
@@ -30,7 +19,15 @@ function disablePinning() {
 
 if (Java.available) {
     Java.perform(function() {
-        awaitForCondition(disablePinning);
+        const observer = Process.attachModuleObserver({
+            onAdded(module) {
+                if (module.name == "libflutter.so") {
+                    log(module.name + " is loaded");
+                    disablePinning(module.name);
+                }
+            },
+            onRemoved(module) {}
+        });
     });
 } else {
     log("Error: Java runtime is not available!");

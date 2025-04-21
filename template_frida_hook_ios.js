@@ -2,19 +2,8 @@ function log(msg) {
     console.log("[" + new Date().toLocaleString() + "] " + msg);
 }
 
-var awaitForCondition = function(callback) {
-    var int = setInterval(function() {
-        if (Module.findBaseAddress("Flutter")) {
-            clearInterval(int);
-            callback();
-            log("Flutter framework is loaded");
-            return;
-        }
-    }, 0);
-}
-
-function disablePinning() {
-    var baseAddress = Module.findBaseAddress("Flutter");
+function disablePinning(moduleName) {
+    var baseAddress = Module.findBaseAddress(moduleName);
     var hookAddress = baseAddress.add(ptr("0x00000000"));       // modify an offset here
 
     Interceptor.attach(hookAddress, {
@@ -29,7 +18,15 @@ function disablePinning() {
 }
 
 if (ObjC.available) {
-    awaitForCondition(disablePinning);
+    const observer = Process.attachModuleObserver({
+        onAdded(module) {
+            if (module.name == "Flutter") {
+                log(module.name + " is loaded");
+                disablePinning(module.name);
+            }
+        },
+        onRemoved(module) {}
+    });
 } else {
     log("Error: Objective-C runtime is not available!");
 }

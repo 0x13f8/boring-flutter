@@ -1,6 +1,6 @@
 # boring-flutter
 
-Forked version to support both Android (32-bit and 64-bit) and iOS (64-bit; thin and fat binary). Use interval and callback to support lazy loading of the Flutter module in certain apps.
+Forked version to support both Android (64-bit) and iOS (64-bit; thin and fat binary). Requires Frida 16.7.0 or later to use `Process.attachModuleObserver()`.
 - Android: Hook x509.cc - `ssl_crypto_x509_session_verify_cert_chain()` to force the return value to 1 (`true`).
 - iOS: Hook handshake.cc - `ssl_verify_peer_cert()` to force the return value to 0 (`ssl_verify_ok`).
 

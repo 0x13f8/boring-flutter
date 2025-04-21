@@ -284,9 +284,10 @@ if __name__ == "__main__":
             r2 = r2pipe.open(newfile, flags=['-2'])         # disable stderr
         address = perform_64bits_analysis_verify_peer_cert(r2, platform)
     elif platform == 'android':
-        if bits == 32:
-            address = perform_32bits_analysis_verify_cert_chain(r2, platform)
-        elif bits == 64:
+        # 2025-04-21: not working with 32-bit Android for newer Dart versions (~3.2+)
+        # if bits == 32:
+        #     address = perform_32bits_analysis_verify_cert_chain(r2, platform)
+        if bits == 64:
             address = perform_64bits_analysis_verify_cert_chain(r2, platform)
     else:
         print('❌  Quantum???')

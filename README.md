@@ -1,6 +1,6 @@
 # boring-flutter
 
-Forked version to support both Android (64-bit) and iOS (64-bit; thin and fat binary). Requires Frida 16.7.0 or later to use `Process.attachModuleObserver()`.
+Forked version to support both Android (64-bit) and iOS (64-bit; thin and fat binary). Requires Frida 17 or later to use `Process.getModuleByName()`.
 - Android: Hook x509.cc - `ssl_crypto_x509_session_verify_cert_chain()` to force the return value to 1 (`true`).
 - iOS: Hook handshake.cc - `ssl_verify_peer_cert()` to force the return value to 0 (`ssl_verify_ok`).
 

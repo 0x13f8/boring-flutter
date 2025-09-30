@@ -3,7 +3,7 @@ function log(msg) {
 }
 
 function disablePinning(moduleName) {
-    var baseAddress = Module.findBaseAddress(moduleName);
+    var baseAddress = Process.getModuleByName(moduleName).base;
     var hookAddress = baseAddress.add(ptr("0x00000000"));       // modify an offset here
 
     Interceptor.attach(hookAddress, {

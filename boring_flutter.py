@@ -109,9 +109,9 @@ def perform_64bits_analysis_verify_cert_chain(r2, platform):
         print('❌  Could not find the string "{}" '.format(search_string_ssl_client))
         exit(0)       
     else:
-        print('🔥 Found the string "{}" @ {}'.format(search_string_ssl_client, hex(search[0]['offset'])))
+        print('🔥 Found the string "{}" @ {}'.format(search_string_ssl_client, hex(search[0]['addr'])))
         print('🔥 Searching for a cross-reference of the string "{}" to find ssl_crypto_x509_session_verify_cert_chain()'.format(search_string_ssl_client))
-        targets = r2.cmdj('axtj {}'.format(search[0]['offset']))
+        targets = r2.cmdj('axtj {}'.format(search[0]['addr']))
         for t in targets:
             target = t['fcn_addr']
             print('🔥  Found potential function @ {}'.format(hex(target)))
@@ -141,10 +141,10 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
     mov_instructions = []
     for hit in search:
         if hit['code'].startswith('mov'):
-            print('\033[31m{} {}\033[0m'.format(hex(hit['offset']), hit['code']))
+            print('\033[31m{} {}\033[0m'.format(hex(hit['addr']), hit['code']))
             mov_instructions.append(hit)
         else:
-            print('{} {}'.format(hex(hit['offset']), hit['code']))
+            print('{} {}'.format(hex(hit['addr']), hit['code']))
 
     if not mov_instructions:
         print('❌  Could not find an instruction with {} scalar value'.format(search_scalar_verify_peer_cert))
@@ -153,13 +153,13 @@ def perform_64bits_analysis_verify_peer_cert(r2, platform):
     print('🔥 Performing simple instruction matching to find ssl_verify_peer_cert()')
     target = ''
     for mov_instruction in mov_instructions:
-        instructions = r2.cmdj('pdj 3 @{}'.format(mov_instruction['offset']))
+        instructions = r2.cmdj('pdj 3 @{}'.format(mov_instruction['addr']))
         if len(instructions) == 3 and instructions[1]['disasm'].startswith('mov') and instructions[2]['disasm'].startswith('bl'):
-            print('✅  {} {} (match)'.format(hex(mov_instruction['offset']), mov_instruction['code']))
-            target = hex(mov_instruction['offset'])
+            print('✅  {} {} (match)'.format(hex(mov_instruction['addr']), mov_instruction['code']))
+            target = hex(mov_instruction['addr'])
             break
         else:
-            print('❌  {} {} (no match)'.format(hex(mov_instruction['offset']), mov_instruction['code']))
+            print('❌  {} {} (no match)'.format(hex(mov_instruction['addr']), mov_instruction['code']))
 
     if not target:
         print('❌  Could not find a matching function ')
@@ -191,7 +191,7 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
     mov_instructions = []
     for hit in search:
         if hit['code'].startswith('mov'):
-            # print('\033[31m{} {}\033[0m'.format(hex(hit['offset']), hit['code']))
+            # print('\033[31m{} {}\033[0m'.format(hex(hit['addr']), hit['code']))
             mov_instructions.append(hit)
 
     if not mov_instructions:
@@ -201,9 +201,9 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
     print('🔥 Performing simple instruction matching to find ssl_crypto_x509_session_verify_cert_chain()')
     target = ''
     for mov_instruction in mov_instructions:
-        # print('🔥 Find prelude for current offset @ {}'.format(hex(mov_instruction['offset'])))
+        # print('🔥 Find prelude for current offset @ {}'.format(hex(mov_instruction['addr'])))
         try:
-            r2.cmd('s {}'.format(mov_instruction['offset']))
+            r2.cmd('s {}'.format(mov_instruction['addr']))
             prelude = r2.cmd('ap').splitlines()[-1]
 
             # print('🔥 Pattern matching on prelude @ {}'.format(prelude))
@@ -211,7 +211,7 @@ def perform_32bits_analysis_verify_cert_chain(r2, platform):
             if len(instructions) == 5 and instructions[0]['type'] == 'push' and instructions[1]['type'] == 'sub'\
                     and instructions[2]['type'] == 'mov' and instructions[3]['type'] == 'mov'\
                     and instructions[3]['val'] == 0x50 and instructions[4]['type'] == 'store':
-                print('✅  scalar offset @ {} -> prelude offset @ {} (match)'.format(mov_instruction['offset'], prelude))
+                print('✅  scalar offset @ {} -> prelude offset @ {} (match)'.format(mov_instruction['addr'], prelude))
                 target = prelude
                 break
         except:
